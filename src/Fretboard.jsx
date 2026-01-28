@@ -20,53 +20,77 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
   const fretCount = 21
 
+  function isScaleNote(noteIndex) {
+    return scaleNotes.includes(noteIndex)
+  }
+
   function isInShape(stringIndex, fret) {
     if (!shape) return false
     if (fret < shape.box[0] || fret > shape.box[1]) return false
     const string = STRINGS[stringIndex]
     const note = (string.note + fret) % 12
-    return scaleNotes.includes(note)
+    return isScaleNote(note)
+  }
+
+  function openInShape(stringIndex) {
+    if (!shape) return false
+    // open string is fret 0; only possible if box starts at 0
+    if (shape.box[0] !== 0) return false
+    const noteIndex = STRINGS[stringIndex].note
+    return isScaleNote(noteIndex) // open note must be in scale
   }
 
   function isAnyRoot(noteIndex) {
     return noteIndex === keyIndex
   }
 
-  function bigDotClass({ inShape, noteIndex }) {
-    // Variant 1 (classic):
-    // - faint scale dots across neck (grey)
-    // - shape notes blue
-    // - ANY root note inside shape = red
+  function classForInShapeNote(noteIndex) {
+    // For dots/labels that are IN the shape
     if (styleVariant === 'classic') {
-      if (!inShape) return "w-5 h-5 rounded-full bg-zinc-500 opacity-40"
-      if (isAnyRoot(noteIndex)) return "w-8 h-8 rounded-full bg-red-500 text-xs flex items-center justify-center"
-      return "w-7 h-7 rounded-full bg-blue-500 text-xs flex items-center justify-center"
+      if (isAnyRoot(noteIndex)) return "bg-red-500"
+      return "bg-blue-500"
     }
 
-    // Variant 2 (harmonic highlights):
-    // - all shape notes dark grey
-    // - all root notes red
-    // - 3rd and 5th in blue
-    // - faint scale dots still visible
     if (styleVariant === 'harmonic') {
-      if (!inShape) return "w-5 h-5 rounded-full bg-zinc-500 opacity-40"
-
       const deg = degreeForNote(noteIndex, keyIndex, scale)
-      if (isAnyRoot(noteIndex)) {
-        return "w-8 h-8 rounded-full bg-red-500 text-xs flex items-center justify-center"
-      }
-      if (deg === 3 || deg === 5) {
-        return "w-7 h-7 rounded-full bg-blue-500 text-xs flex items-center justify-center"
-      }
-      return "w-7 h-7 rounded-full bg-zinc-700 text-xs flex items-center justify-center"
+      if (isAnyRoot(noteIndex)) return "bg-red-500"
+      if (deg === 3 || deg === 5) return "bg-blue-500"
+      return "bg-zinc-700"
     }
 
-    return "w-5 h-5 rounded-full bg-zinc-500 opacity-40"
+    return "bg-zinc-700"
+  }
+
+  function bigDotClass({ inShape, noteIndex }) {
+    // faint scale dots across neck (grey)
+    if (!inShape) return "w-5 h-5 rounded-full bg-zinc-500 opacity-40"
+    // in-shape dots
+    const color = classForInShapeNote(noteIndex)
+    const size = isAnyRoot(noteIndex) ? "w-8 h-8" : "w-7 h-7"
+    return `${size} rounded-full ${color} text-xs flex items-center justify-center`
+  }
+
+  
+  
+  
+  function stringLabelChipClass(stringIndex) {
+    const noteIndex = STRINGS[stringIndex].note
+    const inScale = isScaleNote(noteIndex)
+
+    // If open string isn't in the scale: no circle, just plain text
+    if (!inScale) {
+      return "text-zinc-300 font-bold"
+    }
+
+    // Color open strings exactly like in-shape notes (same size + same color logic).
+    const color = classForInShapeNote(noteIndex)
+    const size = isAnyRoot(noteIndex) ? "w-8 h-8" : "w-7 h-7"
+    return `${size} rounded-full ${color} text-white flex items-center justify-center font-bold text-xs`
   }
 
   return (
     <div className="overflow-x-auto">
-      <div className="grid" style={{gridTemplateColumns:`40px repeat(${fretCount}, minmax(40px,1fr))`}}>
+      <div className="grid" style={{gridTemplateColumns:`56px repeat(${fretCount}, minmax(40px,1fr))`}}>
         <div></div>
         {Array.from({length:fretCount}).map((_,i)=>{
           const fret=i+1
@@ -79,11 +103,19 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
 
         {STRINGS.map((s,si)=>(
           <>
-            <div className="flex items-center justify-center font-bold">{s.name}</div>
+            <div className="flex items-center justify-center pr-2">
+              <div
+                className={stringLabelChipClass(si)}
+                title={isScaleNote(s.note) ? "Open string is in the scale" : "Open string not in scale"}
+              >
+                {s.name}
+              </div>
+            </div>
+
             {Array.from({length:fretCount}).map((_,i)=>{
               const fret=i+1
               const noteIndex = (s.note + fret) % 12
-              const isScale = scaleNotes.includes(noteIndex)
+              const isScale = isScaleNote(noteIndex)
               const inShape = isInShape(si,fret)
 
               return (

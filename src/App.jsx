@@ -15,11 +15,25 @@ export default function App() {
   const key = KEYS[keyIdx]
   const scale = SCALES[scaleIdx]
 
+  
   useEffect(()=>{
     const s = generateShapes(keyIdx, scale, { span, fretCount: 21 })
+
+    // Try to keep the same root (string + fret) when switching span
+    let newIndex = 0
+    if (shapes.length && shapeIdx < shapes.length) {
+      const prevShape = shapes[shapeIdx]
+      const match = s.findIndex(sh =>
+        sh.root.stringIndex === prevShape.root.stringIndex &&
+        sh.root.fret === prevShape.root.fret
+      )
+      if (match !== -1) newIndex = match
+    }
+
     setShapes(s)
-    setShapeIdx(0)
+    setShapeIdx(newIndex)
   },[keyIdx, scaleIdx, span])
+
 
   const shape = shapes[shapeIdx]
 
@@ -66,9 +80,9 @@ export default function App() {
             onClick={()=>shapes.length && setShapeIdx((shapeIdx+shapes.length-1)%shapes.length)}
             className="px-2 py-1 rounded-md border border-zinc-700 disabled:opacity-40"
             disabled={!shapes.length}
-            aria-label="Previous shape"
+            aria-label="Decrement shape"
           >
-            ◀
+            -
           </button>
 
           <div className="mx-2 px-3 py-1 border border-zinc-700 rounded-md text-sm font-bold text-center min-w-[160px]">
@@ -79,9 +93,9 @@ export default function App() {
             onClick={()=>shapes.length && setShapeIdx((shapeIdx+1)%shapes.length)}
             className="px-2 py-1 rounded-md border border-zinc-700 disabled:opacity-40"
             disabled={!shapes.length}
-            aria-label="Next shape"
+            aria-label="Increment shape"
           >
-            ▶
+            +
           </button>
         </div>
 
