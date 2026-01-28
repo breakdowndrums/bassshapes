@@ -28,7 +28,6 @@ function collectScaleNotesInBox(scaleNotes, boxStart, boxEnd, fretCount) {
 }
 
 function findLowestRootInBox(keyIndex, boxStart, boxEnd, fretCount) {
-  // Lowest means lowest-pitched string first (E->A->D->G), then lowest fret.
   for (const s of STRINGS_PITCH) {
     for (let fret = boxStart; fret <= boxEnd; fret++) {
       if (fret < 0 || fret > fretCount) continue
@@ -41,28 +40,42 @@ function findLowestRootInBox(keyIndex, boxStart, boxEnd, fretCount) {
 }
 
 function fingerFromBox(boxStart, rootFret) {
-  // Normal boxes: boxStart..boxStart+span-1 maps to fingers 1..span (up to 4)
-  // Special case when boxStart==0: fret 0 is open string (no finger),
-  // so fret 1 => finger 1, fret 2 => finger 2, etc.
+  // Special case: boxStart==0 means fret 0 is open (no finger), fret 1 => finger 1, etc.
   if (boxStart === 0) {
-    if (rootFret === 0) return 1 // treat open root as index for naming
-    return rootFret // fret number equals finger number
+    if (rootFret === 0) return 1
+    return rootFret
   }
   return (rootFret - boxStart) + 1
 }
 
+function coverageSignature(scaleNotes, boxStart, boxEnd, fretCount) {
+  // Signature based on exact visible in-shape scale-note positions (stringIndex,fret).
+  // This lets us detect duplicates like a 5-fret box that doesn't add any new notes vs 4-fret.
+  const parts = []
+  for (let si = 0; si < STRINGS_DISPLAY.length; si++) {
+    const open = STRINGS_DISPLAY[si].note
+    for (let fret = boxStart; fret <= boxEnd; fret++) {
+      if (fret < 0 || fret > fretCount) continue
+      const note = (open + fret) % 12
+      if (!scaleNotes.includes(note)) continue
+      parts.push(`${si}:${fret}`)
+    }
+  }
+  // sort for stable signature
+  parts.sort()
+  return parts.join(',')
+}
+
 export function generateShapes(keyIndex, scale, opts = {}) {
-  const fretCount = opts.fretCount ?? 21 // highest fret shown in grid (1..21); open is 0
-  const span = opts.span ?? 4 // 4 or 5
+  const fretCount = opts.fretCount ?? 21
+  const span = opts.span ?? 4
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
   const requiredCount = scaleNotes.length
   const shapes = []
 
-  // Enumerate boxes, allowing boxStart = 0 (open string included)
   for (let boxStart = 0; boxStart <= fretCount - span + 1; boxStart++) {
     const boxEnd = boxStart + (span - 1)
 
-    // Box must contain ALL pitch classes of the scale
     const found = collectScaleNotesInBox(scaleNotes, boxStart, boxEnd, fretCount)
     if (found.size !== requiredCount) continue
 
@@ -72,18 +85,23 @@ export function generateShapes(keyIndex, scale, opts = {}) {
     const finger = fingerFromBox(boxStart, lowestRoot.fret)
     if (finger < 1 || finger > 4) continue
 
+    const sig = coverageSignature(scaleNotes, boxStart, boxEnd, fretCount)
+
     shapes.push({
       name: `${lowestRoot.stringName}${finger}`,
       root: { stringIndex: lowestRoot.displayIndex, fret: lowestRoot.fret, finger },
       box: [boxStart, boxEnd],
-      span
+      span,
+      sig,
     })
   }
 
   shapes.sort((a,b)=>{
     if (a.root.fret !== b.root.fret) return a.root.fret - b.root.fret
     const rank = (di) => (di===3?0:di===2?1:di===1?2:3)
-    return rank(a.root.stringIndex) - rank(b.root.stringIndex)
+    const pr = rank(a.root.stringIndex) - rank(b.root.stringIndex)
+    if (pr !== 0) return pr
+    return a.span - b.span
   })
 
   return shapes
