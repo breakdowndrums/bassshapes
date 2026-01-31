@@ -31,7 +31,7 @@ export default function App() {
   const [styleVariant, setStyleVariant] = useState('classic') // classic | harmonic | fingers
   const [labelMode, setLabelMode] = useState('notes') // notes | fingers | degrees
   const [openStringsMode, setOpenStringsMode] = useState('shapeOnly') // shapeOnly | inScale
-  const [activeCategory, setActiveCategory] = useState('notes') // notes | display
+  const [displayActive, setDisplayActive] = useState(false)
 
   const key = KEYS[keyIdx]
   const scale = SCALES[scaleIdx]
@@ -248,44 +248,41 @@ export default function App() {
 
   return (
     <div className="p-4 space-y-4" style={{ backgroundColor: '#171717' }}>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <h1 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-ui)', color: 'var(--color-label)' }}>
           Bass Shapes
         </h1>
 
+        <div className="flex items-center gap-4 flex-wrap">
+          {keySelect}
+          {scaleSelect}
+        </div>
+
         <div className="flex items-center gap-2">
-          {['notes', 'display'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveCategory(tab)}
-              className={`px-3 py-1.5 rounded border text-sm capitalize ${
-                activeCategory === tab
-                  ? 'bg-neutral-800 border-neutral-600 text-white'
-                  : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800/60'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setDisplayActive((v) => !v)}
+            className={`px-3 py-1.5 rounded border text-sm capitalize ${
+              displayActive
+                ? 'bg-neutral-800 border-neutral-600 text-white'
+                : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800/60'
+            }`}
+          >
+            display
+          </button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-6 items-center">
-        {activeCategory === 'notes' && (
-          <>
-            {keySelect}
-            {scaleSelect}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-neutral-300">Shape</span>
+          {shapeStepper}
+        </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-300">Shape</span>
-              {shapeStepper}
-            </div>
-          </>
-        )}
+        {styleStepper}
 
-        {activeCategory === 'display' && (
+        {displayActive && (
           <>
-            {styleStepper}
             {labelsStepper}
             {openStringsStepper}
           </>

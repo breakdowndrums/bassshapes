@@ -2,11 +2,11 @@
 import { getNoteName } from './music'
 
 const FINGER_COLORS = {
-  0: '#a34ce6', // open string
-  1: '#d94b95',
-  2: '#574ce6',
-  3: '#ff633f',
-  4: '#4c8fe6',
+  0: '#F93B41', // open string
+  1: '#FAB101',
+  2: '#FB6500',
+  3: '#745BFB',
+  4: '#01A5FA',
 }
 
 const STRINGS = [
