@@ -30,8 +30,17 @@ export default function App() {
 
   const [styleVariant, setStyleVariant] = useState('classic') // classic | harmonic | fingers
   const [labelMode, setLabelMode] = useState('notes') // notes | fingers | degrees
+  const [prevNonFingerLabelMode, setPrevNonFingerLabelMode] = useState('notes')
   const [openStringsMode, setOpenStringsMode] = useState('shapeOnly') // shapeOnly | inScale
   const [displayActive, setDisplayActive] = useState(false)
+useEffect(() => {
+    if (styleVariant === 'fingers') {
+      setPrevNonFingerLabelMode((prev) => (labelMode === 'fingers' ? prev : labelMode))
+      setLabelMode('fingers')
+    } else {
+      setLabelMode((cur) => (cur === 'fingers' ? prevNonFingerLabelMode : cur))
+    }
+  }, [styleVariant])
 
   const key = KEYS[keyIdx]
   const scale = SCALES[scaleIdx]
