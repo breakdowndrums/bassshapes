@@ -1,6 +1,9 @@
 
 import { getNoteName } from './music'
 
+const PENT_MAJOR = new Set([0, 2, 4, 7, 9])
+const PENT_MINOR = new Set([0, 3, 5, 7, 10])
+
 const FINGER_COLORS = {
   0: '#F93B41', // open string
   1: '#FAB101',
@@ -20,6 +23,7 @@ const MARKERS = [3,5,7,9,12,15,17,19]
 
 function degreeForNote(noteIndex, keyIndex, scale) {
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
+
   const idx = scaleNotes.indexOf(noteIndex)
   return idx === -1 ? null : (idx + 1)
 }
@@ -144,25 +148,36 @@ function isAnyRoot(noteIndex) {
   }
 
   function classForInShapeNote(noteIndex) {
-    // For dots/labels that are IN the shape
     if (styleVariant === 'fingers') {
-      // background color is applied inline; keep roots distinct
+      // background color is applied inline (finger palette)
       return isAnyRoot(noteIndex) ? 'ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300' : ''
     }
 
     if (styleVariant === 'classic') {
-      if (isAnyRoot(noteIndex)) return "bg-red-500"
-      return "bg-blue-500"
+      if (isAnyRoot(noteIndex)) return 'bg-red-500'
+      return 'bg-blue-500'
     }
 
     if (styleVariant === 'harmonic') {
       const deg = degreeForNote(noteIndex, keyIndex, scale)
-      if (isAnyRoot(noteIndex)) return "bg-red-500"
-      if (deg === 3 || deg === 5) return "bg-blue-500"
-      return "bg-zinc-700"
+      if (isAnyRoot(noteIndex)) return 'bg-red-500'
+      if (deg === 3 || deg === 5) return 'bg-blue-500'
+      return 'bg-zinc-700'
     }
 
-    return "bg-zinc-700"
+    if (styleVariant === 'pentatonic') {
+      // Highlight 5 pentatonic tones inside the selected 7-note scale
+      const rel = (noteIndex - (keyIndex % 12) + 12) % 12
+      const hasMaj3 = scale.intervals.includes(4)
+      const pentMajor = new Set([0,2,4,7,9])
+      const pentMinor = new Set([0,3,5,7,10])
+      const activeSet = hasMaj3 ? pentMajor : pentMinor
+      if (isAnyRoot(noteIndex)) return 'bg-red-500'
+      if (activeSet.has(rel)) return 'bg-blue-500'
+      return 'bg-zinc-700'
+    }
+
+    return 'bg-zinc-700'
   }
 
   

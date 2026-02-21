@@ -151,7 +151,7 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            const opts = ['classic', 'harmonic', 'fingers']
+            const opts = ['classic', 'harmonic', 'pentatonic', 'fingers']
             const i = opts.indexOf(styleVariant)
             setStyleVariant(opts[(i + opts.length - 1) % opts.length])
           }}
@@ -162,13 +162,13 @@ useEffect(() => {
         </button>
 
         <div className="min-w-[120px] px-3 py-1 flex items-center justify-center text-sm text-white bg-neutral-800 border-l border-r border-neutral-700 text-center">
-          {styleVariant === 'classic' ? 'Classic' : styleVariant === 'harmonic' ? 'Harmonic' : 'Finger colors'}
+          {styleVariant === 'classic' ? 'Classic' : styleVariant === 'harmonic' ? 'Harmonic' : styleVariant === 'pentatonic' ? 'Pentatonic' : 'Finger colors'}
         </div>
 
         <button
           type="button"
           onClick={() => {
-            const opts = ['classic', 'harmonic', 'fingers']
+            const opts = ['classic', 'harmonic', 'pentatonic', 'fingers']
             const i = opts.indexOf(styleVariant)
             setStyleVariant(opts[(i + 1) % opts.length])
           }}
