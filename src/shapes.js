@@ -1,55 +1,56 @@
-const STRINGS_DISPLAY = [
-  { name:'G', note:7 },
-  { name:'D', note:2 },
-  { name:'A', note:9 },
-  { name:'E', note:4 },
-]
+import { getNoteName } from './music'
 
-const STRINGS_PITCH = [
-  { name:'E', note:4, displayIndex:3 },
-  { name:'A', note:9, displayIndex:2 },
-  { name:'D', note:2, displayIndex:1 },
-  { name:'G', note:7, displayIndex:0 },
-]
+function stringsFromTuning(tuningMidis, prefer = 'sharp') {
+  // tuningMidis: array of MIDI numbers, top string first (highest pitch on top)
+  const display = tuningMidis.map((midi, displayIndex) => ({
+    displayIndex,
+    openMidi: midi,
+    openPc: ((midi % 12) + 12) % 12,
+    name: getNoteName(((midi % 12) + 12) % 12, prefer),
+  }))
 
-function coverageSignature(scaleNotes, boxStart, boxEnd, fretCount) {
+  // pitch order: lowest pitch first for "lowest root" scanning
+  const pitch = [...display].sort((a, b) => a.openMidi - b.openMidi)
+  return { display, pitch }
+}
+
+function coverageSignature(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount) {
   const out = []
-  STRINGS_DISPLAY.forEach((s, si) => {
+  stringsDisplay.forEach((s) => {
     for (let fret = boxStart; fret <= boxEnd; fret++) {
       if (fret < 0 || fret > fretCount) continue
-      const note = (s.note + fret) % 12
-      if (scaleNotes.includes(note)) out.push(`${si}:${fret}`)
+      const note = (s.openPc + fret) % 12
+      if (scaleNotes.includes(note)) out.push(`${s.displayIndex}:${fret}`)
     }
   })
   return out.sort().join(',')
 }
 
-function countNotesPerString(scaleNotes, boxStart, boxEnd, fretCount) {
-  const counts = Array(STRINGS_DISPLAY.length).fill(0)
-  STRINGS_DISPLAY.forEach((s, si) => {
+function countNotesPerString(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount) {
+  const counts = Array(stringsDisplay.length).fill(0)
+  stringsDisplay.forEach((s, si) => {
     for (let fret = boxStart; fret <= boxEnd; fret++) {
       if (fret < 0 || fret > fretCount) continue
-      const note = (s.note + fret) % 12
+      const note = (s.openPc + fret) % 12
       if (scaleNotes.includes(note)) counts[si]++
     }
   })
   return counts
 }
 
-function countScaleNotesOnFrets(scaleNotes, frets, fretCount) {
-  // counts positions (string,fret) for the given frets that are scale notes
+function countScaleNotesOnFrets(stringsDisplay, scaleNotes, frets, fretCount) {
   let c = 0
-  STRINGS_DISPLAY.forEach((s) => {
+  stringsDisplay.forEach((s) => {
     for (const fret of frets) {
       if (fret < 0 || fret > fretCount) continue
-      const note = (s.note + fret) % 12
+      const note = (s.openPc + fret) % 12
       if (scaleNotes.includes(note)) c++
     }
   })
   return c
 }
 
-function chooseFiveFretMode(scaleNotes, boxStart, fretCount) {
+function chooseFiveFretMode(stringsDisplay, scaleNotes, boxStart, fretCount) {
   // 5-fret boxes: default to INDEX covering two frets (easier on bass).
   // Switch to PINKY covering the two highest frets only when the highest fret has relatively few notes.
   //
@@ -57,13 +58,13 @@ function chooseFiveFretMode(scaleNotes, boxStart, fretCount) {
   // c4  = number of scale-note positions on the highest fret (boxStart+4)
   // c34 = number of scale-note positions on the two highest frets (boxStart+3 and boxStart+4)
   // If c4 is less than half of c34 (i.e. c4*2 < c34), use PINKY; otherwise use INDEX.
-  const c4 = countScaleNotesOnFrets(scaleNotes, [boxStart + 4], fretCount)
-  const c34 = countScaleNotesOnFrets(scaleNotes, [boxStart + 3, boxStart + 4], fretCount)
+  const c4 = countScaleNotesOnFrets(stringsDisplay, scaleNotes, [boxStart + 4], fretCount)
+  const c34 = countScaleNotesOnFrets(stringsDisplay, scaleNotes, [boxStart + 3, boxStart + 4], fretCount)
   if (c4 * 2 < c34) return 'pinky'
   return 'index'
 }
 
-function chooseOpenDoubleBassMode(scaleNotes, boxStart, boxEnd, fretCount) {
+function chooseOpenDoubleBassMode(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount) {
   // Open-string double bass fingering:
   // - fingers used: 1,2,4 (skip 3)
   // - if box needs 4 fretted frets (1..4), one finger covers two frets:
@@ -73,8 +74,8 @@ function chooseOpenDoubleBassMode(scaleNotes, boxStart, boxEnd, fretCount) {
   // Tie-break: prefer INDEX (matches your C major example expectation).
   const needsFourFrettedFrets = (boxStart === 0 && boxEnd >= 4)
   if (!needsFourFrettedFrets) return 'none'
-  const indexCount = countScaleNotesOnFrets(scaleNotes, [1, 2], fretCount)
-  const pinkyCount = countScaleNotesOnFrets(scaleNotes, [3, 4], fretCount)
+  const indexCount = countScaleNotesOnFrets(stringsDisplay, scaleNotes, [1, 2], fretCount)
+  const pinkyCount = countScaleNotesOnFrets(stringsDisplay, scaleNotes, [3, 4], fretCount)
   if (indexCount < pinkyCount) return 'index'
   if (pinkyCount < indexCount) return 'pinky'
   return 'index'
@@ -134,13 +135,13 @@ function fingerForFret(boxStart, boxEnd, span, mode, openMode, fret) {
   return 4
 }
 
-function findLowestRootInBox(keyIndex, boxStart, boxEnd, fretCount) {
-  for (const s of STRINGS_PITCH) {
+function findLowestRootInBox(stringsPitch, keyIndex, boxStart, boxEnd, fretCount) {
+  for (const s of stringsPitch) {
     for (let fret = boxStart; fret <= boxEnd; fret++) {
       if (fret < 0 || fret > fretCount) continue
-      const note = (s.note + fret) % 12
+      const note = (s.openPc + fret) % 12
       if (note === keyIndex) {
-        return { displayIndex: s.displayIndex, fret, stringName: s.name }
+        return { displayIndex: s.displayIndex, fret, stringName: s.name, midi: s.openMidi + fret }
       }
     }
   }
@@ -148,6 +149,9 @@ function findLowestRootInBox(keyIndex, boxStart, boxEnd, fretCount) {
 }
 
 export function generateShapes(keyIndex, scale, opts = {}) {
+  const tuningMidis = opts.tuningMidis ?? [43,38,33,28]
+  const prefer = opts.prefer ?? 'sharp'
+  const { display: stringsDisplay, pitch: stringsPitch } = stringsFromTuning(tuningMidis, prefer)
   const fretCount = opts.fretCount ?? 21
   const span = opts.span ?? 4
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
@@ -159,25 +163,25 @@ export function generateShapes(keyIndex, scale, opts = {}) {
 
     // must contain all pitch classes of the scale (across all strings) within the box
     const found = new Set()
-    STRINGS_DISPLAY.forEach((s) => {
+    stringsDisplay.forEach((s) => {
       for (let fret = boxStart; fret <= boxEnd; fret++) {
         if (fret < 0 || fret > fretCount) continue
-        const note = (s.note + fret) % 12
+        const note = (s.openPc + fret) % 12
         if (scaleNotes.includes(note)) found.add(note)
       }
     })
     if (found.size !== requiredCount) continue
 
     // 3NPS constraint
-    const counts = countNotesPerString(scaleNotes, boxStart, boxEnd, fretCount)
+    const counts = countNotesPerString(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount)
     if (!counts.every(c => c === 3)) continue
 
-    const root = findLowestRootInBox(keyIndex, boxStart, boxEnd, fretCount)
+    const root = findLowestRootInBox(stringsPitch, keyIndex, boxStart, boxEnd, fretCount)
     if (!root) continue
 
     const usesDoubleBass = (boxStart === 0)
-    const openMode = usesDoubleBass ? chooseOpenDoubleBassMode(scaleNotes, boxStart, boxEnd, fretCount) : 'none'
-    const mode = (!usesDoubleBass && span === 5) ? chooseFiveFretMode(scaleNotes, boxStart, fretCount) : 'none'
+    const openMode = usesDoubleBass ? chooseOpenDoubleBassMode(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount) : 'none'
+    const mode = (!usesDoubleBass && span === 5) ? chooseFiveFretMode(stringsDisplay, scaleNotes, boxStart, fretCount) : 'none'
 
     let finger = fingerForFret(boxStart, boxEnd, span, mode, openMode, root.fret)
     
@@ -191,7 +195,7 @@ export function generateShapes(keyIndex, scale, opts = {}) {
       mode,
       openMode,
       doubleBass: usesDoubleBass,
-      sig: coverageSignature(scaleNotes, boxStart, boxEnd, fretCount),
+      sig: coverageSignature(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount),
     })
   }
 

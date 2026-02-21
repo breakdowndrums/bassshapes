@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { KEYS, SCALES } from './music'
+import { KEYS, SCALES, TUNING_PRESETS, midiToLabel } from './music'
 import { generateShapes } from './shapes'
 import Fretboard from './Fretboard'
 
@@ -28,26 +28,27 @@ export default function App() {
   const [shapeIdx, setShapeIdx] = useState(0)
   const [shapes, setShapes] = useState([])
 
-  const [styleVariant, setStyleVariant] = useState('classic') // classic | harmonic | fingers
-  const [labelMode, setLabelMode] = useState('notes') // notes | fingers | degrees
-  const [prevNonFingerLabelMode, setPrevNonFingerLabelMode] = useState('notes')
+  const [styleVariant, setStyleVariant] = useState('classic')
+
+  // Finger labels only valid in classic
+  const [labelMode, setLabelMode] = useState('notes')
+ // notes | fingers | degrees
+
+  const effectiveLabelMode =
+    styleVariant === 'classic' ? labelMode : labelMode === 'fingers' ? 'notes' : labelMode
+
   const [openStringsMode, setOpenStringsMode] = useState('shapeOnly') // shapeOnly | inScale
+  const [tuningMidis, setTuningMidis] = useState(TUNING_PRESETS[0].midis)
+  const [tuningPresetIdx, setTuningPresetIdx] = useState(0)
+  const [tuningOpen, setTuningOpen] = useState(false)
   const [displayActive, setDisplayActive] = useState(false)
-useEffect(() => {
-    if (styleVariant === 'fingers') {
-      setPrevNonFingerLabelMode((prev) => (labelMode === 'fingers' ? prev : labelMode))
-      setLabelMode('fingers')
-    } else {
-      setLabelMode((cur) => (cur === 'fingers' ? prevNonFingerLabelMode : cur))
-    }
-  }, [styleVariant])
 
   const key = KEYS[keyIdx]
   const scale = SCALES[scaleIdx]
 
   useEffect(() => {
-    const s4 = generateShapes(keyIdx, scale, { span: 4, fretCount: 21 })
-    const s5 = generateShapes(keyIdx, scale, { span: 5, fretCount: 21 })
+    const s4 = generateShapes(keyIdx, scale, { span: 4, fretCount: 21, tuningMidis, prefer: key.prefer })
+    const s5 = generateShapes(keyIdx, scale, { span: 5, fretCount: 21, tuningMidis, prefer: key.prefer })
     const merged = dedupeByCoverage([...s4, ...s5])
 
     // Left-to-right ordering on the fretboard
@@ -73,7 +74,7 @@ useEffect(() => {
     setShapes(merged)
     setShapeIdx(newIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyIdx, scaleIdx])
+  }, [keyIdx, scaleIdx, tuningMidis])
 
   const shape = shapes[shapeIdx]
 
@@ -86,7 +87,7 @@ useEffect(() => {
     <div className="flex items-center gap-2">
       <label className="text-sm text-neutral-300">Key</label>
       <select
-        className="bg-[#262626] border border-neutral-700 rounded-md px-3 py-1 text-sm text-white focus:outline-none focus:ring-0"
+        className={`bg-[#262626] border border-neutral-700 rounded-md px-3 py-1 text-sm text-white focus:outline-none focus:ring-0 ${tuningPresetIdx < 0 ? "bg-neutral-900 border-neutral-800 text-neutral-400" : "bg-neutral-800 border-neutral-700 text-white"}` }
         value={keyIdx}
         onChange={(e) => setKeyIdx(Number(e.target.value))}
       >
@@ -151,9 +152,11 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            const opts = ['classic', 'harmonic', 'pentatonic', 'fingers']
+            const opts = ['classic', 'pentatonic', 'harmonic']
             const i = opts.indexOf(styleVariant)
-            setStyleVariant(opts[(i + opts.length - 1) % opts.length])
+            const next = opts[(i + opts.length - 1) % opts.length]
+            if (next !== 'classic' && effectiveLabelMode === 'fingers') setLabelMode('notes')
+            setStyleVariant(next)
           }}
           className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
           aria-label="Decrease"
@@ -162,15 +165,17 @@ useEffect(() => {
         </button>
 
         <div className="min-w-[120px] px-3 py-1 flex items-center justify-center text-sm text-white bg-neutral-800 border-l border-r border-neutral-700 text-center">
-          {styleVariant === 'classic' ? 'Classic' : styleVariant === 'harmonic' ? 'Harmonic' : styleVariant === 'pentatonic' ? 'Pentatonic' : 'Finger colors'}
+          {styleVariant === 'classic' ? 'Classic' : styleVariant === 'pentatonic' ? 'Pentatonic' : 'Harmonic'}
         </div>
 
         <button
           type="button"
           onClick={() => {
-            const opts = ['classic', 'harmonic', 'pentatonic', 'fingers']
+            const opts = ['classic', 'pentatonic', 'harmonic']
             const i = opts.indexOf(styleVariant)
-            setStyleVariant(opts[(i + 1) % opts.length])
+            const next = opts[(i + 1) % opts.length]
+            if (next !== 'classic' && effectiveLabelMode === 'fingers') setLabelMode('notes')
+            setStyleVariant(next)
           }}
           className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
           aria-label="Increase"
@@ -188,8 +193,8 @@ useEffect(() => {
         <button
           type="button"
           onClick={() => {
-            const opts = ['notes', 'fingers', 'degrees']
-            const i = opts.indexOf(labelMode)
+            const opts = styleVariant === 'classic' ? ['notes', 'degrees', 'fingers'] : ['notes', 'degrees']
+            const i = opts.indexOf(effectiveLabelMode)
             setLabelMode(opts[(i + opts.length - 1) % opts.length])
           }}
           className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
@@ -199,14 +204,14 @@ useEffect(() => {
         </button>
 
         <div className="min-w-[130px] px-3 py-1 flex items-center justify-center text-sm text-white bg-neutral-800 border-l border-r border-neutral-700 text-center">
-          {labelMode === 'notes' ? 'Note names' : labelMode === 'fingers' ? 'Fingers' : 'Scale degrees'}
+          {effectiveLabelMode === 'notes' ? 'Note names' : effectiveLabelMode === 'fingers' ? 'Fingers' : 'Scale degrees'}
         </div>
 
         <button
           type="button"
           onClick={() => {
-            const opts = ['notes', 'fingers', 'degrees']
-            const i = opts.indexOf(labelMode)
+            const opts = ['notes', 'degrees', 'fingers']
+            const i = opts.indexOf(effectiveLabelMode)
             setLabelMode(opts[(i + 1) % opts.length])
           }}
           className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
@@ -279,6 +284,14 @@ useEffect(() => {
           >
             display
           </button>
+
+          <button
+            type="button"
+            onClick={() => setTuningOpen(true)}
+            className="px-3 py-1.5 rounded border text-sm capitalize bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800/60"
+          >
+            tuning
+          </button>
         </div>
       </div>
 
@@ -290,9 +303,10 @@ useEffect(() => {
 
         {styleStepper}
 
+        {labelsStepper}
+
         {displayActive && (
           <>
-            {labelsStepper}
             {openStringsStepper}
           </>
         )}
@@ -300,14 +314,160 @@ useEffect(() => {
 
       {shapes.length === 0 && <div className="text-red-400">No valid 3NPS shape found for this key and scale.</div>}
 
+
+      {tuningOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setTuningOpen(false)} />
+          <div className="relative w-full max-w-xl rounded-lg border border-neutral-800 bg-[#171717] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm text-neutral-200" style={{ fontFamily: 'var(--font-ui)' }}>
+                Tuning
+              </div>
+              <button
+                type="button"
+                onClick={() => setTuningOpen(false)}
+                className="text-neutral-300 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <label className="text-sm text-neutral-300">Preset</label>
+              <select
+                className={`border rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-0 ${tuningPresetIdx < 0 ? "bg-neutral-900 border-neutral-800 text-neutral-400" : "bg-[#262626] border-neutral-700 text-white"}`}
+                value={tuningPresetIdx}
+                onChange={(e) => {
+                  const idx = Number(e.target.value)
+                  setTuningPresetIdx(idx)
+                  if (idx >= 0) {
+                    setTuningMidis(TUNING_PRESETS[idx].midis)
+                  }
+                }}
+              >
+                <option value={-1}> </option>
+                {TUNING_PRESETS.map((p, idx) => (
+                  <option key={p.name} value={idx}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="text-sm text-neutral-300 ml-2">Strings</label>
+              <div className="flex items-stretch overflow-hidden rounded-md border border-neutral-700 bg-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const n = Math.max(4, tuningMidis.length - 1)
+                    setTuningMidis((prev) => {
+                      if (prev.length === n) return prev
+                      if (prev.length > n) return prev.slice(0, n)
+                      const out = [...prev]
+                      while (out.length < n) {
+                        const top = out[0]
+                        out.unshift(top + 5)
+                      }
+                      return out
+                    })
+                    setTuningPresetIdx(-1)
+                  }}
+                  className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
+                  aria-label="Decrease"
+                >
+                  −
+                </button>
+
+                <div className="min-w-[56px] px-3 py-1 flex items-center justify-center text-sm text-white bg-neutral-800 border-l border-r border-neutral-700">
+                  {tuningMidis.length}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const n = Math.min(8, tuningMidis.length + 1)
+                    setTuningMidis((prev) => {
+                      if (prev.length === n) return prev
+                      if (prev.length > n) return prev.slice(0, n)
+                      const out = [...prev]
+                      while (out.length < n) {
+                        const top = out[0]
+                        out.unshift(top + 5)
+                      }
+                      return out
+                    })
+                    setTuningPresetIdx(-1)
+                  }}
+                  className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
+                  aria-label="Increase"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs text-neutral-400">Top string first (highest pitch)</div>
+              {tuningMidis.map((midi, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-10 text-sm text-neutral-300">{i + 1}</div>
+
+                  <div className="flex items-stretch overflow-hidden rounded-md border border-neutral-700 bg-neutral-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTuningMidis((prev) => prev.map((x, idx) => (idx === i ? Math.max(0, x - 1) : x)))
+                        setTuningPresetIdx(-1)
+                      }}
+                      className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
+                      aria-label="Down semitone"
+                    >
+                      −
+                    </button>
+
+                    <div className="min-w-[140px] px-3 py-1 flex items-center justify-center text-sm text-white bg-neutral-800 border-l border-r border-neutral-700 text-center">
+                      {midiToLabel(midi, key.prefer)}
+                      <span className="ml-2 text-xs text-neutral-400">({midi})</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTuningMidis((prev) => prev.map((x, idx) => (idx === i ? Math.min(127, x + 1) : x)))
+                        setTuningPresetIdx(-1)
+                      }}
+                      className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700"
+                      aria-label="Up semitone"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTuningOpen(false)}
+                className="px-3 py-1.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800/60 text-sm"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Fretboard
         keyIndex={keyIdx}
         scale={scale}
         prefer={key.prefer}
         shape={shape}
         styleVariant={styleVariant}
-        labelMode={labelMode}
+        labelMode={effectiveLabelMode}
         openStringsMode={openStringsMode}
+        tuningMidis={tuningMidis}
       />
     </div>
   )

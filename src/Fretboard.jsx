@@ -12,13 +12,6 @@ const FINGER_COLORS = {
   4: '#01A5FA',
 }
 
-const STRINGS = [
-  { name:'G', note:7 },
-  { name:'D', note:2 },
-  { name:'A', note:9 },
-  { name:'E', note:4 },
-]
-
 const MARKERS = [3,5,7,9,12,15,17,19]
 
 function degreeForNote(noteIndex, keyIndex, scale) {
@@ -28,9 +21,21 @@ function degreeForNote(noteIndex, keyIndex, scale) {
   return idx === -1 ? null : (idx + 1)
 }
 
-export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant, openStringsMode = 'shapeOnly', labelMode = 'notes' }) {
+export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant, openStringsMode = 'shapeOnly', labelMode = 'notes', tuningMidis = [43,38,33,28] }) {
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
   const fretCount = 21
+
+  const strings = tuningMidis.map((midi) => {
+    const pc = ((midi % 12) + 12) % 12
+    const octave = Math.floor(midi / 12) - 1
+    return {
+      openMidi: midi,
+      openPc: pc,
+      label: `${getNoteName(pc, prefer)}${octave}`,
+      short: getNoteName(pc, prefer),
+    }
+  })
+
 
   function isScaleNote(noteIndex) {
     return scaleNotes.includes(noteIndex)
@@ -39,15 +44,15 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
   function openIsInShape(stringIndex) {
     if (!shape) return false
     if (shape.box[0] !== 0) return false
-    const noteIndex = STRINGS[stringIndex].note
+    const noteIndex = strings[stringIndex].openPc
     return isScaleNote(noteIndex)
   }
 
   function isInShape(stringIndex, fret) {
     if (!shape) return false
     if (fret < shape.box[0] || fret > shape.box[1]) return false
-    const string = STRINGS[stringIndex]
-    const note = (string.note + fret) % 12
+    const string = strings[stringIndex]
+    const note = (string.openPc + fret) % 12
     return isScaleNote(note)
   }
 
@@ -55,7 +60,7 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
     if (!shape) return false
     // open string is fret 0; only possible if box starts at 0
     if (shape.box[0] !== 0) return false
-    const noteIndex = STRINGS[stringIndex].note
+    const noteIndex = strings[stringIndex].openPc
     return isScaleNote(noteIndex) // open note must be in scale
   }
 
@@ -70,9 +75,9 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
     // Compare how many scale-note positions are on frets 1&2 vs 3&4
     const countOnFrets = (frets) => {
       let c = 0
-      STRINGS.forEach((s) => {
+      strings.forEach((s) => {
         frets.forEach((fret) => {
-          const note = (s.note + fret) % 12
+          const note = (s.openPc + fret) % 12
           if (scaleNotes.includes(note)) c++
         })
       })
@@ -148,7 +153,8 @@ function isAnyRoot(noteIndex) {
   }
 
   function classForInShapeNote(noteIndex) {
-    if (styleVariant === 'fingers') {
+    // When label = fingers, use finger-color palette regardless of the selected style
+    if (labelMode === 'fingers') {
       // background color is applied inline (finger palette)
       return isAnyRoot(noteIndex) ? 'ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300' : ''
     }
@@ -169,8 +175,8 @@ function isAnyRoot(noteIndex) {
       // Highlight 5 pentatonic tones inside the selected 7-note scale
       const rel = (noteIndex - (keyIndex % 12) + 12) % 12
       const hasMaj3 = scale.intervals.includes(4)
-      const pentMajor = new Set([0,2,4,7,9])
-      const pentMinor = new Set([0,3,5,7,10])
+      const pentMajor = new Set([0, 2, 4, 7, 9])
+      const pentMinor = new Set([0, 3, 5, 7, 10])
       const activeSet = hasMaj3 ? pentMajor : pentMinor
       if (isAnyRoot(noteIndex)) return 'bg-red-500'
       if (activeSet.has(rel)) return 'bg-blue-500'
@@ -195,7 +201,7 @@ function bigDotClass({ inShape, noteIndex }) {
   
   
   function stringLabelChipClass(stringIndex) {
-    const noteIndex = STRINGS[stringIndex].note
+    const noteIndex = strings[stringIndex].openPc
     const inScale = isScaleNote(noteIndex)
 
     // If open string isn't in the scale: no circle, just plain text
@@ -211,7 +217,7 @@ function bigDotClass({ inShape, noteIndex }) {
 
     // Circle for open string label
     const size = isAnyRoot(noteIndex) ? "w-8 h-8" : "w-7 h-7"
-    const extra = styleVariant === 'fingers' ? (isAnyRoot(noteIndex) ? "ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300" : "") : classForInShapeNote(noteIndex)
+    const extra = labelMode === 'fingers' ? (isAnyRoot(noteIndex) ? "ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300" : "") : classForInShapeNote(noteIndex)
     return `${size} rounded-full ${extra} text-white flex items-center justify-center font-bold text-xs`
   }
 
@@ -228,25 +234,25 @@ function bigDotClass({ inShape, noteIndex }) {
           )
         })}
 
-        {STRINGS.map((s,si)=>(
+        {strings.map((s,si)=>(
           <>
             <div className="flex items-center justify-center pr-2">
               <div
                 className={stringLabelChipClass(si)}
                 style={
-                  styleVariant === 'fingers' && isScaleNote(s.note) && ((openStringsMode === 'inScale') || openIsInShape(si))
-                    ? { backgroundColor: FINGER_COLORS[0], opacity: isAnyRoot(s.note) ? 1 : 0.75 }
+                  labelMode === 'fingers' && isScaleNote(s.openPc) && ((openStringsMode === 'inScale') || openIsInShape(si))
+                    ? { backgroundColor: FINGER_COLORS[0], opacity: isAnyRoot(s.openPc) ? 1 : 0.75 }
                     : undefined
                 }
-                title={isScaleNote(s.note) ? "Open string is in the scale" : "Open string not in scale"}
+                title={isScaleNote(s.openPc) ? "Open string is in the scale" : "Open string not in scale"}
               >
-                {s.name}
+                {s.label ?? s.short ?? ''}
               </div>
             </div>
 
             {Array.from({length:fretCount}).map((_,i)=>{
               const fret=i+1
-              const noteIndex = (s.note + fret) % 12
+              const noteIndex = (s.openPc + fret) % 12
               const isScale = isScaleNote(noteIndex)
               const inShape = isInShape(si,fret)
 
@@ -256,7 +262,7 @@ function bigDotClass({ inShape, noteIndex }) {
                     <div
                       className={bigDotClass({ inShape, noteIndex })}
                       style={
-                        styleVariant === 'fingers' && (inShape || fret === 0)
+                        labelMode === 'fingers' && (inShape || fret === 0)
                           ? {
                               backgroundColor: fret === 0 ? FINGER_COLORS[0] : FINGER_COLORS[Number(fingerForDisplayedFret(fret))],
                               opacity: 1,
