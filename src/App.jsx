@@ -26,6 +26,7 @@ export default function App() {
   const [keyIdx, setKeyIdx] = useState(0)
   const [scaleIdx, setScaleIdx] = useState(0)
   const [shapeIdx, setShapeIdx] = useState(0)
+  const allScaleMode = shapeIdx === -1
   const [shapes, setShapes] = useState([])
 
   const [styleVariant, setStyleVariant] = useState('classic')
@@ -35,7 +36,7 @@ export default function App() {
  // notes | fingers | degrees
 
   const effectiveLabelMode =
-    styleVariant === 'classic' ? labelMode : labelMode === 'fingers' ? 'notes' : labelMode
+    styleVariant === 'classic' && !allScaleMode ? labelMode : labelMode === 'fingers' ? 'notes' : labelMode
 
   const [openStringsMode, setOpenStringsMode] = useState('shapeOnly') // shapeOnly | inScale
   const [tuningMidis, setTuningMidis] = useState(TUNING_PRESETS[0].midis)
@@ -63,22 +64,25 @@ export default function App() {
 
     // Preserve the same root if possible when recomputing shapes
     let newIndex = 0
-    if (shapes.length && shapeIdx < shapes.length) {
+    if (shapes.length && shapeIdx >= 0 && shapeIdx < shapes.length) {
       const prev = shapes[shapeIdx]
-      const match = merged.findIndex(
-        (sh) => sh.root.stringIndex === prev.root.stringIndex && sh.root.fret === prev.root.fret
-      )
-      if (match !== -1) newIndex = match
+      if (prev?.root) {
+        const match = merged.findIndex(
+          (sh) => sh.root.stringIndex === prev.root.stringIndex && sh.root.fret === prev.root.fret
+        )
+        if (match !== -1) newIndex = match
+      }
     }
 
     setShapes(merged)
-    setShapeIdx(newIndex)
+    setShapeIdx((cur) => (cur === -1 ? -1 : newIndex))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyIdx, scaleIdx, tuningMidis])
 
-  const shape = shapes[shapeIdx]
+  const shape = allScaleMode ? null : shapes[shapeIdx]
 
   const shapeLabel = useMemo(() => {
+    if (allScaleMode) return 'All'
     if (!shape) return 'No Shape'
     return shape.name
   }, [shape])
@@ -121,7 +125,13 @@ export default function App() {
     <div className="flex items-stretch overflow-hidden rounded-md border border-neutral-700 bg-neutral-800">
       <button
         type="button"
-        onClick={() => shapes.length && setShapeIdx((shapeIdx + shapes.length - 1) % shapes.length)}
+        onClick={() => {
+          if (!shapes.length) return
+          setShapeIdx((v) => {
+            if (v <= 0) return -1
+            return v - 1
+          })
+        }}
         className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700 disabled:opacity-40"
         disabled={!shapes.length}
         aria-label="Decrease"
@@ -135,7 +145,13 @@ export default function App() {
 
       <button
         type="button"
-        onClick={() => shapes.length && setShapeIdx((shapeIdx + 1) % shapes.length)}
+        onClick={() => {
+          if (!shapes.length) return
+          setShapeIdx((v) => {
+            if (v === -1) return 0
+            return (v + 1) % shapes.length
+          })
+        }}
         className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60 active:bg-neutral-700 disabled:opacity-40"
         disabled={!shapes.length}
         aria-label="Increase"
@@ -147,7 +163,7 @@ export default function App() {
 
   const styleStepper = (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-neutral-300">Style</label>
+      <label className="text-sm text-neutral-300">Focus</label>
       <div className="flex items-stretch overflow-hidden rounded-md border border-neutral-700 bg-neutral-800">
         <button
           type="button"
@@ -467,6 +483,7 @@ export default function App() {
         styleVariant={styleVariant}
         labelMode={effectiveLabelMode}
         openStringsMode={openStringsMode}
+        allScaleMode={allScaleMode}
         tuningMidis={tuningMidis}
       />
     </div>
