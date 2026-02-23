@@ -256,8 +256,8 @@ function bigDotClass({ inShape, noteIndex }) {
             style={{
               left: '56px',
               right: 0,
-              top: '24px',
-              bottom: '24px',
+              top: '23px',
+              bottom: '23px',
             }}
           >
             {Array.from({ length: fretCount + 1 }).map((_, i) => (
@@ -265,10 +265,17 @@ function bigDotClass({ inShape, noteIndex }) {
                 key={i}
                 className={
                   i === 0
-                    ? 'absolute top-0 bottom-0 w-[2px] bg-neutral-400'
-                    : 'absolute top-0 bottom-0 w-px bg-neutral-700'
+                    ? 'absolute top-0 bottom-0 w-0.5 bg-neutral-400'
+                    : 'absolute top-0 bottom-0 w-0.5 bg-neutral-700'
                 }
-                style={{ left: `${(i / fretCount) * 100}%`, transform: i === 0 ? undefined : 'translateX(-0.5px)' }}
+                style={
+                  i === fretCount
+                    ? { right: 0 }
+                    : {
+                        left: `${(i / fretCount) * 100}%`,
+                        transform: i === 0 ? undefined : 'translateX(-0.25px)',
+                      }
+                }
               />
             ))}
           </div>
@@ -276,7 +283,6 @@ function bigDotClass({ inShape, noteIndex }) {
         {strings.map((s,si)=>(
                   <>
                     <div className="relative flex items-center justify-center pr-3">
-                      <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-neutral-600 z-0" />
                       <div
                         className={`relative z-20 ${stringLabelChipClass(si)}` }
                         style={
@@ -298,7 +304,7 @@ function bigDotClass({ inShape, noteIndex }) {
         
                       return (
                         <div key={fret} className="relative h-12 flex items-center justify-center">
-                          <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-neutral-600 z-0" />
+                          <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-neutral-700 z-0" />
                           {isScale && (
                             <div
                               className={`relative z-20 ${bigDotClass({ inShape, noteIndex })}` }
