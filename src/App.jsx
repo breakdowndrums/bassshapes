@@ -2,6 +2,40 @@ import { useState, useEffect, useMemo } from 'react'
 import { KEYS, SCALES, TUNING_PRESETS, midiToLabel } from './music'
 import { generateShapes } from './shapes'
 import Fretboard from './Fretboard'
+import ScaleFinder from './ScaleFinder'
+import { useIsNarrow } from './FretGrid'
+import { usePlayer, upAndDown } from './usePlayer'
+
+const FRET_COUNT = 21
+
+/** Notes to play for the current view: the shape's box, or two octaves from the lowest root. */
+function buildSequence({ shape, allScaleMode, keyIdx, scale, tuningMidis }) {
+  const scalePcs = scale.intervals.map((i) => (keyIdx + i) % 12)
+  const notes = []
+  const each = (fn) =>
+    tuningMidis.forEach((open, si) => {
+      for (let f = 0; f <= FRET_COUNT; f++) fn(si, f, open + f)
+    })
+
+  if (!allScaleMode) {
+    if (!shape) return []
+    const [a, b] = shape.box
+    each((si, f, midi) => {
+      if (f >= a && f <= b && scalePcs.includes(midi % 12)) notes.push({ midi, pos: `${si}:${f}` })
+    })
+    return upAndDown(notes)
+  }
+
+  // "All": two octaves up from the lowest root on the neck; every place a pitch occurs lights up
+  const lowestOpen = Math.min(...tuningMidis)
+  let root = lowestOpen + ((keyIdx - (lowestOpen % 12) + 12) % 12)
+  const highest = Math.max(...tuningMidis) + FRET_COUNT
+  const top = Math.min(root + 24, highest)
+  each((si, f, midi) => {
+    if (midi >= root && midi <= top && scalePcs.includes(midi % 12)) notes.push({ midi, pos: `${si}:${f}` })
+  })
+  return upAndDown(notes)
+}
 
 function dedupeByCoverage(shapes) {
   const bestBySig = new Map()
@@ -23,6 +57,11 @@ function dedupeByCoverage(shapes) {
 }
 
 export default function App() {
+  const [mode, setMode] = useState('scales') // scales | finder
+  const player = usePlayer()
+  const [neck, setNeck] = useState('auto') // auto | horizontal | vertical
+  const narrow = useIsNarrow()
+  const vertical = neck === 'vertical' || (neck === 'auto' && narrow)
   const [keyIdx, setKeyIdx] = useState(0)
   const [scaleIdx, setScaleIdx] = useState(0)
   const [shapeIdx, setShapeIdx] = useState(0)
@@ -53,7 +92,7 @@ export default function App() {
     const merged = dedupeByCoverage([...s4, ...s5])
 
     // Left-to-right ordering on the fretboard
-    const pitchRank = (di) => (di === 3 ? 0 : di === 2 ? 1 : di === 1 ? 2 : 3)
+    const pitchRank = (di) => tuningMidis[di] ?? 0
     merged.sort((a, b) => {
       if (a.box[0] !== b.box[0]) return a.box[0] - b.box[0]
       if ((a.span ?? 4) !== (b.span ?? 4)) return (a.span ?? 4) - (b.span ?? 4)
@@ -81,6 +120,85 @@ export default function App() {
 
   const shape = allScaleMode ? null : shapes[shapeIdx]
 
+  useEffect(() => {
+    player.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyIdx, scaleIdx, shapeIdx, tuningMidis, mode])
+
+  const playControls = (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          if (player.playing) return player.stop()
+          player.play(
+            buildSequence({ shape, allScaleMode, keyIdx, scale, tuningMidis }),
+            player.bpm
+          )
+        }}
+        className={`px-3 py-1 rounded-md border text-sm min-w-[84px] ${
+          player.playing ? 'bg-red-500/20 border-red-500/50 text-white' : 'bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700/60'
+        }`}
+      >
+        {player.playing ? '■ Stop' : '▶ Play'}
+      </button>
+      <div className="flex items-stretch overflow-hidden rounded-md border border-neutral-700 bg-neutral-800">
+        <button
+          type="button"
+          onClick={() => player.setBpm((b) => Math.max(40, b - 10))}
+          className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60"
+          aria-label="Slower"
+        >
+          −
+        </button>
+        <div className="min-w-[76px] px-2 py-1 flex items-center justify-center text-sm text-white border-l border-r border-neutral-700">
+          {player.bpm} bpm
+        </div>
+        <button
+          type="button"
+          onClick={() => player.setBpm((b) => Math.min(240, b + 10))}
+          className="px-2 text-base leading-none text-neutral-200 hover:bg-neutral-700/60"
+          aria-label="Faster"
+        >
+          +
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={() => player.setLoop((v) => !v)}
+        className={`px-3 py-1 rounded-md border text-sm ${
+          player.loop ? 'bg-neutral-700 border-neutral-500 text-white' : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700/60'
+        }`}
+        aria-pressed={player.loop}
+      >
+        Loop
+      </button>
+    </div>
+  )
+
+  const neckStepper = (
+    <div className="flex items-center gap-2">
+      <label className="text-sm text-neutral-300">Neck</label>
+      <div className="flex overflow-hidden rounded-md border border-neutral-700">
+        {[
+          ['auto', 'Auto'],
+          ['horizontal', '↔'],
+          ['vertical', '↕'],
+        ].map(([id, lbl]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setNeck(id)}
+            className={`px-3 py-1 text-sm ${neck === id ? 'bg-neutral-700 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700/60'}`}
+            aria-label={id}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
   const shapeLabel = useMemo(() => {
     if (allScaleMode) return 'All'
     if (!shape) return 'No Shape'
@@ -91,7 +209,7 @@ export default function App() {
     <div className="flex items-center gap-2">
       <label className="text-sm text-neutral-300">Key</label>
       <select
-        className={`bg-[#262626] border border-neutral-700 rounded-md px-3 py-1 text-sm text-white focus:outline-none focus:ring-0 ${tuningPresetIdx < 0 ? "bg-neutral-900 border-neutral-800 text-neutral-400" : "bg-neutral-800 border-neutral-700 text-white"}` }
+        className="bg-[#262626] border border-neutral-700 rounded-md px-3 py-1 text-sm text-white focus:outline-none focus:ring-0"
         value={keyIdx}
         onChange={(e) => setKeyIdx(Number(e.target.value))}
       >
@@ -226,7 +344,7 @@ export default function App() {
         <button
           type="button"
           onClick={() => {
-            const opts = ['notes', 'degrees', 'fingers']
+            const opts = styleVariant === 'classic' ? ['notes', 'degrees', 'fingers'] : ['notes', 'degrees']
             const i = opts.indexOf(effectiveLabelMode)
             setLabelMode(opts[(i + 1) % opts.length])
           }}
@@ -283,12 +401,33 @@ export default function App() {
           Bass Shapes
         </h1>
 
-        <div className="flex items-center gap-4 flex-wrap">
-          {keySelect}
-          {scaleSelect}
+        <div className="flex overflow-hidden rounded-md border border-neutral-700">
+          {[
+            ['scales', 'Scales'],
+            ['finder', 'Scale finder'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMode(id)}
+              className={`px-3 py-1 text-sm ${
+                mode === id ? 'bg-neutral-700 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700/60'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
+        {mode === 'scales' && (
+          <div className="flex items-center gap-4 flex-wrap">
+            {keySelect}
+            {scaleSelect}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
+          {(
           <button
             type="button"
             onClick={() => setDisplayActive((v) => !v)}
@@ -300,6 +439,7 @@ export default function App() {
           >
             display
           </button>
+          )}
 
           <button
             type="button"
@@ -311,6 +451,7 @@ export default function App() {
         </div>
       </div>
 
+      {mode === 'scales' && (
       <div className="flex flex-wrap gap-6 items-center">
         <div className="flex items-center gap-2">
           <span className="text-sm text-neutral-300">Shape</span>
@@ -321,14 +462,24 @@ export default function App() {
 
         {labelsStepper}
 
+        {playControls}
+
         {displayActive && (
           <>
             {openStringsStepper}
+            {neckStepper}
           </>
         )}
       </div>
+      )}
 
-      {shapes.length === 0 && <div className="text-red-400">No valid 3NPS shape found for this key and scale.</div>}
+      {mode === 'scales' && shape?.technique?.low && (
+        <div className="text-sm text-neutral-400">
+          ⚠ Wide stretch low on the neck — if it strains, shift the hand instead (1-2-4 / Simandl).
+        </div>
+      )}
+
+      {mode === 'scales' && shapes.length === 0 && <div className="text-red-400">No valid 3NPS shape found for this key and scale.</div>}
 
 
       {tuningOpen && (
@@ -475,6 +626,22 @@ export default function App() {
         </div>
       )}
 
+      {mode === 'finder' ? (
+        <>
+        {displayActive && <div className="flex flex-wrap gap-6 items-center">{neckStepper}</div>}
+        <ScaleFinder
+          tuningMidis={tuningMidis}
+          vertical={vertical}
+          player={player}
+          onOpenScale={(k, sc) => {
+            setKeyIdx(k)
+            setScaleIdx(sc)
+            setShapeIdx(-1) // show the whole scale across the neck
+            setMode('scales')
+          }}
+        />
+        </>
+      ) : (
       <Fretboard
         keyIndex={keyIdx}
         scale={scale}
@@ -485,7 +652,11 @@ export default function App() {
         openStringsMode={openStringsMode}
         allScaleMode={allScaleMode}
         tuningMidis={tuningMidis}
+        vertical={vertical}
+        active={player.active}
+        onNoteClick={player.tap}
       />
+      )}
     </div>
   )
 }

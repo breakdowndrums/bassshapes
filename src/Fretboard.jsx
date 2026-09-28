@@ -1,8 +1,6 @@
-
 import { getNoteName } from './music'
-
-const PENT_MAJOR = new Set([0, 2, 4, 7, 9])
-const PENT_MINOR = new Set([0, 3, 5, 7, 10])
+import { fingerAt } from './shapes'
+import FretGrid from './FretGrid'
 
 const FINGER_COLORS = {
   0: '#F93B41', // open string
@@ -12,334 +10,139 @@ const FINGER_COLORS = {
   4: '#01A5FA',
 }
 
-const MARKERS = [3,5,7,9,12,15,17,19]
+const PENT_MAJOR = new Set([0, 2, 4, 7, 9])
+const PENT_MINOR = new Set([0, 3, 5, 7, 10])
+const FRET_COUNT = 21
 
-function degreeForNote(noteIndex, keyIndex, scale) {
-  const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
-
-  const idx = scaleNotes.indexOf(noteIndex)
-  return idx === -1 ? null : (idx + 1)
-}
-
-export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant, openStringsMode = 'shapeOnly', labelMode = 'notes', tuningMidis = [43,38,33,28]   ,
-  allScaleMode = false
+export default function Fretboard({
+  keyIndex,
+  scale,
+  prefer,
+  shape,
+  styleVariant,
+  openStringsMode = 'shapeOnly',
+  labelMode = 'notes',
+  tuningMidis = [43, 38, 33, 28],
+  allScaleMode = false,
+  vertical = false,
+  active = new Set(), // "string:fret" positions currently sounding
+  onNoteClick, // (midi, "string:fret") => void
 }) {
-  const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
-  const fretCount = 21
+  const scaleNotes = scale.intervals.map((i) => (keyIndex + i) % 12)
 
   const strings = tuningMidis.map((midi) => {
     const pc = ((midi % 12) + 12) % 12
-    const octave = Math.floor(midi / 12) - 1
-    return {
-      openMidi: midi,
-      openPc: pc,
-      label: `${getNoteName(pc, prefer)}${octave}`,
-      short: getNoteName(pc, prefer),
-    }
+    return { openMidi: midi, openPc: pc, label: `${getNoteName(pc, prefer)}${Math.floor(midi / 12) - 1}` }
   })
 
-
-  function isScaleNote(noteIndex) {
-    return scaleNotes.includes(noteIndex)
+  const isScaleNote = (pc) => scaleNotes.includes(pc)
+  const isRoot = (pc) => pc === keyIndex
+  const degreeOf = (pc) => {
+    const i = scaleNotes.indexOf(pc)
+    return i === -1 ? '' : String(i + 1)
   }
 
-  function openIsInShape(stringIndex) {
-    if (!shape) return false
-    if (shape.box[0] !== 0) return false
-    const noteIndex = strings[stringIndex].openPc
-    return isScaleNote(noteIndex)
-  }
-
-  function isInShape(stringIndex, fret) {
-    const str = strings[stringIndex]
-    const note = (str.openPc + fret) % 12
-
-    // In "All" mode we treat every scale tone as "in shape"
-    if (allScaleMode) return isScaleNote(note)
-
-    if (!shape) return false
-    const [boxStart, boxEnd] = shape.box
-    if (fret < boxStart || fret > boxEnd) return false
-
-    // Selected shapes are defined by the box + scale membership (3NPS constraint is used at generation time)
-    return isScaleNote(note)
-  }
-
-  
-function openInShape(stringIndex) {
-    const openPc = strings[stringIndex].openPc
-    if (!isScaleNote(openPc)) return false
-
+  function isInShape(fret, pc) {
+    if (!isScaleNote(pc)) return false
     if (allScaleMode) return true
     if (!shape) return false
-
-    const [boxStart] = shape.box
-    return boxStart === 0
+    return fret >= shape.box[0] && fret <= shape.box[1]
   }
 
-  
-function chooseOpenDoubleBassMode() {
-    if (!shape) return 'none'
-    if (shape.box[0] !== 0) return 'none'
-    if (shape.box[1] < 4) return 'none'
-
-    // Compare how many scale-note positions are on frets 1&2 vs 3&4
-    const countOnFrets = (frets) => {
-      let c = 0
-      strings.forEach((s) => {
-        frets.forEach((fret) => {
-          const note = (s.openPc + fret) % 12
-          if (scaleNotes.includes(note)) c++
-        })
-      })
-      return c
-    }
-    const low = countOnFrets([1,2])
-    const high = countOnFrets([3,4])
-    if (low < high) return 'index'
-    if (high < low) return 'pinky'
-    return 'index'
+  // open strings: shown as a note when they're part of the shape, or always (if the user chose that)
+  function openShown(pc) {
+    if (!isScaleNote(pc)) return false
+    if (openStringsMode === 'inScale') return true
+    return !!shape && shape.box[0] === 0
   }
 
-  function fingerForOpenDoubleBass(openMode, fret) {
-    // open string itself isn't shown in the grid; keep for completeness
-    if (fret === 0) return 0
-    if (shape.span === 4) {
-      if (fret === 1) return 1
-      if (fret === 2) return 2
-      return 4 // fret 3
-    }
-    // span 5 (0..4)
-    if (openMode === 'pinky') {
-      if (fret === 1) return 1
-      if (fret === 2) return 2
-      return 4 // frets 3&4
-    }
-    // index mode
-    if (fret === 1) return 1
-    if (fret === 2) return 1
-    if (fret === 3) return 2
-    return 4
-  }
-
-  function fingerForFiveFret(mode, fret) {
-    const boxStart = shape.box[0]
-    const offset = fret - boxStart // 0..4
-    if (mode === 'index') {
-      if (offset <= 1) return 1
-      if (offset === 2) return 2
-      if (offset === 3) return 3
-      return 4
-    }
-    // pinky mode
-    if (offset === 0) return 1
-    if (offset === 1) return 2
-    if (offset === 2) return 3
-    return 4
-  }
-
-  
-  function getScaleDegree(noteIndex) {
-    const idx = scaleNotes.indexOf(noteIndex)
-    if (idx === -1) return ''
-    return String(idx + 1)
-  }
-
-function fingerForDisplayedFret(fret) {
-    if (!shape) return ''
-    const boxStart = shape.box[0]
-    if (boxStart === 0) {
-      const openMode = chooseOpenDoubleBassMode()
-      const finger = fingerForOpenDoubleBass(openMode, fret)
-      return finger ? String(finger) : ''
-    }
-    if (shape.span === 4) {
-      return String((fret - boxStart) + 1)
-    }
-    // span 5
-    return String(fingerForFiveFret(shape.mode, fret))
-  }
-function isAnyRoot(noteIndex) {
-    return noteIndex === keyIndex
-  }
-
-  function classForInShapeNote(noteIndex) {
-    // When label = fingers, use finger-color palette regardless of the selected style
-    if (labelMode === 'fingers') {
-      // background color is applied inline (finger palette)
-      return isAnyRoot(noteIndex) ? 'ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300' : ''
-    }
-
-    if (styleVariant === 'classic') {
-      if (isAnyRoot(noteIndex)) return 'bg-red-500'
-      return 'bg-blue-500'
-    }
-
+  function colorClass(pc) {
+    if (labelMode === 'fingers') return isRoot(pc) ? 'ring-2 ring-neutral-300 ring-inset' : ''
+    if (isRoot(pc)) return 'bg-red-500'
     if (styleVariant === 'harmonic') {
-      const deg = degreeForNote(noteIndex, keyIndex, scale)
-      if (isAnyRoot(noteIndex)) return 'bg-red-500'
-      if (deg === 3 || deg === 5) return 'bg-blue-500'
-      return 'bg-zinc-700'
+      const deg = scaleNotes.indexOf(pc) + 1
+      return deg === 3 || deg === 5 ? 'bg-blue-500' : 'bg-zinc-700'
     }
-
     if (styleVariant === 'pentatonic') {
-      // Highlight 5 pentatonic tones inside the selected 7-note scale
-      const rel = (noteIndex - (keyIndex % 12) + 12) % 12
-      const hasMaj3 = scale.intervals.includes(4)
-      const pentMajor = new Set([0, 2, 4, 7, 9])
-      const pentMinor = new Set([0, 3, 5, 7, 10])
-      const activeSet = hasMaj3 ? pentMajor : pentMinor
-      if (isAnyRoot(noteIndex)) return 'bg-red-500'
-      if (activeSet.has(rel)) return 'bg-blue-500'
-      return 'bg-zinc-700'
+      const rel = (pc - keyIndex + 12) % 12
+      const set = scale.intervals.includes(4) ? PENT_MAJOR : PENT_MINOR
+      return set.has(rel) ? 'bg-blue-500' : 'bg-zinc-700'
     }
-
-    return 'bg-zinc-700'
+    return 'bg-blue-500'
   }
 
-  
-function bigDotClass({ inShape, noteIndex }) {
-    // faint scale dots across neck (grey)
-    if (!inShape) return "w-5 h-5 rounded-full bg-zinc-500 opacity-40"
-    // in-shape dots
-    const color = classForInShapeNote(noteIndex)
-    const size = isAnyRoot(noteIndex) ? "w-8 h-8" : "w-7 h-7"
-    return `${size} rounded-full ${color} text-xs flex items-center justify-center`
+  function label(pc, si, fret) {
+    if (labelMode === 'fingers') return fret === 0 ? '0' : String(fingerAt(shape, si, fret) ?? '')
+    if (labelMode === 'degrees') return degreeOf(pc)
+    return getNoteName(pc, prefer)
   }
 
-  
-  
-  
-  
-  function stringLabelChipClass(stringIndex) {
-    const noteIndex = strings[stringIndex].openPc
-    const inScale = isScaleNote(noteIndex)
+  const activeRing = (si, fret) =>
+    active.has(`${si}:${fret}`) ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/30' : ''
 
-    // If open string isn't in the scale: no circle, just plain text
-    if (!inScale) {
-      return "text-neutral-300 font-bold"
+  function renderCell(si, fret) {
+    const s = strings[si]
+    const pc = (s.openPc + fret) % 12
+    const sounding = active.has(`${si}:${fret}`)
+
+    if (fret === 0) {
+      if (!openShown(pc)) {
+        return (
+          <div
+            className={`relative z-20 font-bold text-neutral-300 text-sm rounded-full px-1 transition ${
+              sounding ? 'ring-4 ring-white' : ''
+            }`}
+          >
+            {s.label}
+          </div>
+        )
+      }
+      const size = isRoot(pc) ? 'w-8 h-8' : 'w-7 h-7'
+      return (
+        <div
+          className={`relative z-20 ${size} rounded-full ${colorClass(pc)} ${activeRing(si, 0)} transition text-white flex items-center justify-center font-bold text-xs`}
+          style={labelMode === 'fingers' ? { backgroundColor: FINGER_COLORS[0], opacity: isRoot(pc) ? 1 : 0.75 } : undefined}
+          title="Open string"
+        >
+          {s.label}
+        </div>
+      )
     }
 
-    const showCircle = (openStringsMode === 'inScale') || openIsInShape(stringIndex)
-    if (!showCircle) {
-      // In scale, but we only show open strings when they are part of the shape
-      return "text-neutral-300 font-bold"
+    if (!isScaleNote(pc)) {
+      return sounding ? <div className="relative z-20 w-5 h-5 rounded-full ring-4 ring-white" /> : null
     }
 
-    // Circle for open string label
-    const size = isAnyRoot(noteIndex) ? "w-8 h-8" : "w-7 h-7"
-    const extra = labelMode === 'fingers' ? (isAnyRoot(noteIndex) ? "ring-2 ring-neutral-300 ring-inset border-[0.5px] border-neutral-300" : "") : classForInShapeNote(noteIndex)
-    return `${size} rounded-full ${extra} text-white flex items-center justify-center font-bold text-xs`
+    if (!isInShape(fret, pc)) {
+      return (
+        <div
+          className={`relative z-20 w-5 h-5 rounded-full bg-zinc-500 transition ${
+            sounding ? 'opacity-100 ring-4 ring-white' : 'opacity-40'
+          }`}
+        />
+      )
+    }
+
+    const size = isRoot(pc) ? 'w-8 h-8' : 'w-7 h-7'
+    const finger = labelMode === 'fingers' ? fingerAt(shape, si, fret) : null
+    return (
+      <div
+        className={`relative z-20 ${size} rounded-full ${colorClass(pc)} ${activeRing(si, fret)} transition text-xs text-white flex items-center justify-center`}
+        style={finger != null ? { backgroundColor: FINGER_COLORS[finger] } : undefined}
+      >
+        {label(pc, si, fret)}
+      </div>
+    )
   }
 
   return (
-    <div className="overflow-x-hidden">
-      <div className="w-full">
-        {/* fret markers */}
-        <div className="grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
-          <div></div>
-                  {Array.from({length:fretCount}).map((_,i)=>{
-                    const fret=i+1
-                    return (
-                      <div key={fret} className="text-center text-xs text-zinc-400">
-                        {MARKERS.includes(fret) ? (fret===12?'●●':'●') : ''}
-                      </div>
-                    )
-                  })}
-        </div>
-
-        {/* strings + notes */}
-        <div className="relative grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
-          {/* vertical fret lines (flush with string lines) */}
-          <div
-            className="pointer-events-none absolute z-10"
-            style={{
-              left: '56px',
-              right: 0,
-              top: '23px',
-              bottom: '23px',
-            }}
-          >
-            {Array.from({ length: fretCount + 1 }).map((_, i) => (
-              <div
-                key={i}
-                className={
-                  i === 0
-                    ? 'absolute top-0 bottom-0 w-0.5 bg-neutral-400'
-                    : 'absolute top-0 bottom-0 w-0.5 bg-neutral-700'
-                }
-                style={
-                  i === fretCount
-                    ? { right: 0 }
-                    : {
-                        left: `${(i / fretCount) * 100}%`,
-                        transform: i === 0 ? undefined : 'translateX(-0.25px)',
-                      }
-                }
-              />
-            ))}
-          </div>
-
-        {strings.map((s,si)=>(
-                  <>
-                    <div className="relative flex items-center justify-center pr-3">
-                      <div
-                        className={`relative z-20 ${stringLabelChipClass(si)}` }
-                        style={
-                          labelMode === 'fingers' && isScaleNote(s.openPc) && ((openStringsMode === 'inScale') || openIsInShape(si))
-                            ? { backgroundColor: FINGER_COLORS[0], opacity: isAnyRoot(s.openPc) ? 1 : 0.75 }
-                            : undefined
-                        }
-                        title={isScaleNote(s.openPc) ? "Open string is in the scale" : "Open string not in scale"}
-                      >
-                        {s.label ?? s.short ?? ''}
-                      </div>
-                    </div>
-        
-                    {Array.from({length:fretCount}).map((_,i)=>{
-                      const fret=i+1
-                      const noteIndex = (s.openPc + fret) % 12
-                      const isScale = isScaleNote(noteIndex)
-                      const inShape = isInShape(si,fret)
-        
-                      return (
-                        <div key={fret} className="relative h-12 flex items-center justify-center">
-                          <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-neutral-700 z-0" />
-                          {isScale && (
-                            <div
-                              className={`relative z-20 ${bigDotClass({ inShape, noteIndex })}` }
-                              style={
-                                labelMode === 'fingers' && (inShape || fret === 0)
-                                  ? {
-                                      backgroundColor: fret === 0 ? FINGER_COLORS[0] : FINGER_COLORS[Number(fingerForDisplayedFret(fret))],
-                                      opacity: 1,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {inShape && (labelMode === 'fingers' ? fingerForDisplayedFret(fret) : labelMode === 'degrees' ? getScaleDegree(noteIndex) : getNoteName(noteIndex, prefer))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </>
-                ))}
-        </div>
-
-        {/* fret numbers */}
-        <div className="grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
-          <div></div>
-                  {Array.from({length:fretCount}).map((_,i)=>{
-                    const fret=i+1
-                    return (
-                      <div key={fret} className="text-center text-xs text-zinc-400">
-                        {fret}
-                      </div>
-                    )
-                  })}
-        </div>
-      </div>
-    </div>
+    <FretGrid
+      strings={strings}
+      fretCount={FRET_COUNT}
+      vertical={vertical}
+      renderCell={renderCell}
+      cellLabel={(si, f) => `${strings[si].label} string, ${f === 0 ? 'open' : `fret ${f}`}`}
+      onCellClick={(si, f) => onNoteClick?.(strings[si].openMidi + f, `${si}:${f}`)}
+    />
   )
 }

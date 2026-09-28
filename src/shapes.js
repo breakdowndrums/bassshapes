@@ -201,3 +201,14 @@ export function generateShapes(keyIndex, scale, opts = {}) {
 
   return shapes
 }
+
+/**
+ * The finger (0 = open string, 1–4) used for `fret` inside `shape`.
+ * Single source of truth for fingering — the fretboard labels/colours use this too.
+ */
+export function fingerAt(shape, fret) {
+  if (!shape) return null
+  if (fret === 0) return 0
+  const [boxStart, boxEnd] = shape.box
+  return fingerForFret(boxStart, boxEnd, shape.span, shape.mode, shape.openMode, fret)
+}
