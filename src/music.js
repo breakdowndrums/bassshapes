@@ -38,7 +38,12 @@ export const SCALES = [
   { name: 'Altered', intervals: [0,1,3,4,6,8,10] },
 
   // Fifth mode of harmonic minor
-  { name: 'HM5 (Mixo♭9)', intervals: [0,1,4,5,7,8,10] },
+  { name: 'Mixo♭9♭13', intervals: [0,1,4,5,7,8,10] },
+
+  // Symmetric scales
+  { name: 'HTGT', intervals: [0,1,3,4,6,7,9,10], notesPerString: [2,3] },
+  { name: 'GTHT', intervals: [0,2,3,5,6,8,9,11], notesPerString: [2,3] },
+  { name: 'GT', intervals: [0,2,4,6,8,10], notesPerString: [2,3] },
 ]
 
 export function getNoteName(index, prefer) {

@@ -172,9 +172,10 @@ export function generateShapes(keyIndex, scale, opts = {}) {
     })
     if (found.size !== requiredCount) continue
 
-    // 3NPS constraint
+    // Symmetric scales also support boxes with two notes on a string.
     const counts = countNotesPerString(stringsDisplay, scaleNotes, boxStart, boxEnd, fretCount)
-    if (!counts.every(c => c === 3)) continue
+    const [minNotes, maxNotes] = scale.notesPerString ?? [3, 3]
+    if (!counts.every(c => c >= minNotes && c <= maxNotes)) continue
 
     const root = findLowestRootInBox(stringsPitch, keyIndex, boxStart, boxEnd, fretCount)
     if (!root) continue
