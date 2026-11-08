@@ -26,6 +26,8 @@ export default function Fretboard({ keyIndex, scale, prefer, shape, styleVariant
 }) {
   const scaleNotes = scale.intervals.map(i => (keyIndex + i) % 12)
   const fretCount = 21
+  const fretCellWidth = 40
+  const gridTemplateColumns = `56px repeat(${fretCount}, ${fretCellWidth}px)`
 
   const strings = tuningMidis.map((midi) => {
     const pc = ((midi % 12) + 12) % 12
@@ -233,10 +235,10 @@ function bigDotClass({ inShape, noteIndex }) {
   }
 
   return (
-    <div className="overflow-x-hidden">
-      <div className="w-full">
+    <div className="overflow-x-auto">
+      <div className="inline-block min-w-full">
         {/* fret markers */}
-        <div className="grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
+        <div className="grid" style={{ gridTemplateColumns }}>
           <div></div>
                   {Array.from({length:fretCount}).map((_,i)=>{
                     const fret=i+1
@@ -249,7 +251,7 @@ function bigDotClass({ inShape, noteIndex }) {
         </div>
 
         {/* strings + notes */}
-        <div className="relative grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
+        <div className="relative grid" style={{ gridTemplateColumns }}>
           {/* vertical fret lines (flush with string lines) */}
           <div
             className="pointer-events-none absolute z-10"
@@ -328,7 +330,7 @@ function bigDotClass({ inShape, noteIndex }) {
         </div>
 
         {/* fret numbers */}
-        <div className="grid" style={{ gridTemplateColumns: `56px repeat(${fretCount}, minmax(0,1fr))` }}>
+        <div className="grid" style={{ gridTemplateColumns }}>
           <div></div>
                   {Array.from({length:fretCount}).map((_,i)=>{
                     const fret=i+1
